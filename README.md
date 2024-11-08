@@ -1,5 +1,5 @@
 > [!NOTE]
-> This is for [Gitpod Flex](https://app.gitpod.io), if you are using [Gitpod Classic](https://www.gitpod.io) (PAYG), please refer to the [Gitpod Classic Environment Cleanup Action](https://github.com/marketplace/actions/delete-clean-gitpod-workspaces)
+> This is for [Gitpod Flex](https://app.gitpod.io), if you are using [Gitpod Classic](https://gitpod.io/workspaces) (PAYG), please refer to the [Gitpod Classic Environment Cleanup Action](https://github.com/marketplace/actions/delete-clean-gitpod-workspaces)
 
 # Gitpod Environment Cleanup Action
 
@@ -69,21 +69,43 @@ jobs:
           PRINT_SUMMARY: true
 ```
 
-## Inputs
+## Inputs ⚙️
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `GITPOD_TOKEN` | Yes | - | Gitpod Personal Access Token with necessary permissions |
-| `ORGANIZATION_ID` | Yes | - | Your Gitpod Flex organization ID |
-| `OLDER_THAN_DAYS` | No | 10 | Delete environments not started for this many days |
-| `PRINT_SUMMARY` | No | false | Generate a summary of deleted environments |
+| Input             | Required | Default | Description                           |
+| ----------------- | -------- | ------- | ------------------------------------- |
+| `GITPOD_TOKEN`    | Yes      | -       | Gitpod Personal Access Token          |
+| `ORGANIZATION_ID` | Yes      | -       | Gitpod Flex organization ID           |
+| `OLDER_THAN_DAYS` | No       | 10      | Delete environments older than X days |
+| `PRINT_SUMMARY`   | No       | false   | Generate detailed summary report      |
 
-## Outputs
+## Outputs 📊
 
-| Output | Description |
-|--------|-------------|
-| `success` | 'true' if the action completed successfully, 'false' otherwise |
-| `deleted_count` | Number of environments deleted |
+| Output              | Description                              |
+| ------------------- | ---------------------------------------- |
+| `success`           | 'true' if cleanup completed successfully |
+| `deleted_count`     | Number of environments deleted           |
+| `avg_days_inactive` | Average days of inactivity               |
+
+## Summary Report Example 📑
+
+```markdown
+# Environment Cleanup Summary
+
+| Metric                     | Value       |
+| -------------------------- | ----------- |
+| Total Environments Cleaned | 5           |
+| Average Days Inactive      | 15.3 days   |
+| Oldest Last Start          | 25 days ago |
+| Newest Last Start          | 10 days ago |
+
+## Deleted Environments
+
+| Environment ID | Project                            | Last Activity | Created    | Creator  | Days Inactive |
+| -------------- | ---------------------------------- | ------------- | ---------- | -------- | ------------- |
+| 01924aff-...   | github.com/siddhant-k-code/website | 2023-11-01    | 2023-10-15 | user-123 | 15 days       |
+| 01924bff-...   | github.com/siddhant-k-code/docs    | 2023-10-25    | 2023-10-01 | user-456 | 22 days       |
+| 01924cff-...   | github.com/siddhant-k-code/example | 2023-10-20    | 2023-09-15 | user-789 | 18 days       |
+```
 
 ## Prerequisites
 
@@ -96,14 +118,13 @@ jobs:
    - Get your organization ID from Gitpod Flex dashboard
    - Add it as a GitHub secret named `GITPOD_ORGANIZATION_ID`
 
-## Deletion Criteria
+## Cleanup Criteria 🔍
 
-An environment will be deleted if it meets ALL of the following criteria:
-- Is in `STOPPED` phase
-- Has no uncommitted changes
-- Has no unpushed commits
-- Is older than the specified number of days
-- Belongs to the specified organization
+An environment is deleted only if ALL conditions are met:
+- Not started for X days (configurable)
+- Currently in STOPPED phase
+- No uncommitted changes
+- No unpushed commits
 
 ## Security Considerations
 
