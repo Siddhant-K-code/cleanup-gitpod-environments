@@ -1,5 +1,5 @@
 name: 'Gitpod Environment Cleanup'
-description: 'Automatically clean up stopped Gitpod Flex environments that are older than a specified number of days and have no pending changes.'
+description: 'Automatically clean up inactive Gitpod Flex environments based on age and status.'
 author: 'Siddhant-K-code'
 
 branding:

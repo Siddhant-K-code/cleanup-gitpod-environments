@@ -1,6 +1,13 @@
+> [!NOTE]
+> This is for [Gitpod Flex](https://app.gitpod.io), if you are using [Gitpod Classic](https://www.gitpod.io) (PAYG), please refer to the [Gitpod Classic Environment Cleanup Action](https://github.com/marketplace/actions/delete-clean-gitpod-workspaces)
+
 # Gitpod Environment Cleanup Action
 
 Automatically clean up stopped Gitpod environments that are older than a specified number of days and have no pending changes. This action helps maintain a clean workspace and manage resource usage in your Gitpod Flex organization.
+
+> [!IMPORTANT]
+> `GITPOD_TOKEN`: Required. [Learn more](https://www.gitpod.io/docs/flex/integrations/personal-access-token) about how to create a Gitpod Personal Access Token in Gitpod Flex.
+
 
 ## Features
 
@@ -30,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Old Environments
-        uses: gitpod-io/cleanup-gitpod-environments@v1
+        uses: Siddhant-K-code/cleanup-gitpod-environments@v1
         with:
           GITPOD_TOKEN: ${{ secrets.GITPOD_TOKEN }}
           ORGANIZATION_ID: ${{ secrets.GITPOD_ORGANIZATION_ID }}
@@ -51,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Old Environments
-        uses: gitpod-io/cleanup-gitpod-environments@v1
+        uses: Siddhant-K-code/cleanup-gitpod-environments@v1
         with:
           GITPOD_TOKEN: ${{ secrets.GITPOD_TOKEN }}
           ORGANIZATION_ID: ${{ secrets.GITPOD_ORGANIZATION_ID }}
