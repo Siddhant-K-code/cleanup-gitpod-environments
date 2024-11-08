@@ -16,6 +16,7 @@ interface Environment {
   id: string;
   metadata: {
     createdAt: string;
+    lastStartedAt: string;
   };
   status: {
     phase: string;
@@ -31,27 +32,27 @@ interface ListEnvironmentsResponse {
 }
 
 /**
- * Checks if the given date is older than specified days
+ * Checks if the environment is stale based on its last started time
  *
- * @param {string} dateString - ISO date string to check
- * @param {number} days - Number of days to compare against
- * @returns {boolean} - True if the date is older than specified days
+ * @param {string} lastStartedAt - ISO date string of last environment start
+ * @param {number} days - Number of days to consider for staleness
+ * @returns {boolean} - True if the environment is considered stale
  */
-function isOlderThanDays(dateString: string, days: number): boolean {
-  const date = new Date(dateString);
+function isStale(lastStartedAt: string, days: number): boolean {
+  const lastStarted = new Date(lastStartedAt);
   const daysInMs = days * 24 * 60 * 60 * 1000;
   const cutoffDate = new Date(Date.now() - daysInMs);
-  return date < cutoffDate;
+  return lastStarted < cutoffDate;
 }
 
 /**
  * Lists the environments from the Gitpod API and identifies those that should be deleted.
- * Environments are selected for deletion if they are stopped, do not have changed files
- * or unpushed commits, and are older than the specified number of days.
+ * Environments are selected for deletion if they are stopped, have no pending changes,
+ * and haven't been started for the specified number of days.
  *
  * @param {string} gitpodToken - The access token for Gitpod API.
  * @param {string} organizationId - The organization ID.
- * @param {number} olderThanDays - Delete environments older than these many days
+ * @param {number} olderThanDays - Delete environments not started for these many days
  * @returns {Promise<string[]>} - A promise that resolves to an array of environment IDs to be deleted.
  */
 async function listEnvironments(
@@ -89,16 +90,19 @@ async function listEnvironments(
         const isStopped = env.status.phase === "ENVIRONMENT_PHASE_STOPPED";
         const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
         const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
-        const isOldEnough = isOlderThanDays(env.metadata.createdAt, olderThanDays);
+        const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
 
-        if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isOldEnough) {
+        if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
           toDelete.push(env.id);
-          core.debug(`Environment ${env.id} created at ${env.metadata.createdAt} is ${olderThanDays} days old and marked for deletion`);
+          core.debug(
+            `Environment ${env.id} last started at ${env.metadata.lastStartedAt} ` +
+            `(created at ${env.metadata.createdAt}) is marked for deletion`
+          );
         }
       });
 
       pageToken = response.data.pagination.next_page_token;
-    } while (pageToken); // Continue until no more pages
+    } while (pageToken);
 
     return toDelete;
   } catch (error) {
