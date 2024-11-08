@@ -1,0 +1,33 @@
+name: 'Gitpod Environment Cleanup'
+description: 'Automatically clean up stopped Gitpod environments that are older than a specified number of days and have no pending changes. This action helps maintain a clean workspace and manage resource usage in your Gitpod Flex organization.'
+author: 'Siddhant-K-code'
+
+branding:
+  icon: 'trash-2'
+  color: 'orange'
+
+inputs:
+  GITPOD_TOKEN:
+    description: 'Gitpod Personal Access Token with necessary permissions'
+    required: true
+  ORGANIZATION_ID:
+    description: 'Your Gitpod Flex organization ID'
+    required: true
+  OLDER_THAN_DAYS:
+    description: 'Delete environments older than this many days'
+    required: false
+    default: '10'
+  PRINT_SUMMARY:
+    description: 'Generate a summary of deleted environments'
+    required: false
+    default: 'false'
+
+outputs:
+  success:
+    description: 'True if the action completed successfully, false otherwise'
+  deleted_count:
+    description: 'Number of environments deleted'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'

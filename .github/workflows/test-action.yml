@@ -1,0 +1,33 @@
+name: 'Test Action'
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  run-action:
+    name: Run action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Cleanup Environments (Dry Run)
+        uses: ./
+        with:
+          GITPOD_TOKEN: ${{ secrets.GITPOD_TOKEN }}
+          ORGANIZATION_ID: ${{ secrets.GITPOD_ORGANIZATION_ID }}
+          OLDER_THAN_DAYS: '0'
+          PRINT_SUMMARY: 'true'

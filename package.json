@@ -1,0 +1,40 @@
+{
+  "name": "cleanup-gitpod-environments",
+  "version": "1.0.0",
+  "description": "Automatically clean up stopped Gitpod environments that are older than a specified number of days and have no pending changes. This action helps maintain a clean workspace and manage resource usage in your Gitpod Flex organization.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "rm -rf dist && npx tsc --project tsconfig.json --outDir dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Siddhant-K-code/cleanup-gitpod-environments.git"
+  },
+  "keywords": [
+    "github",
+    "actions",
+    "gitpod",
+    "flex",
+    "cleanup",
+    "environments",
+    "automated",
+    "automated",
+    "flex",
+    "environment",
+    "deletion"
+  ],
+  "author": "Siddhant-K-code",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Siddhant-K-code/cleanup-gitpod-environments/issues"
+  },
+  "homepage": "https://github.com/Siddhant-K-code/cleanup-gitpod-environments#readme",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "axios": "^1.7.7",
+    "typescript": "^5.6.3"
+  }
+}
