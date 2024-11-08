@@ -3,7 +3,7 @@
 
 # Gitpod Environment Cleanup Action
 
-Automatically clean up stopped Gitpod environments that are older than a specified number of days and have no pending changes. This action helps maintain a clean workspace and manage resource usage in your Gitpod Flex organization.
+Automatically clean up stale Gitpod environments that haven't been started for a specified number of days and have no pending changes. This action helps maintain a clean workspace and manage resource usage in your Gitpod Flex organization.
 
 > [!IMPORTANT]
 > `GITPOD_TOKEN`: Required. [Learn more](https://www.gitpod.io/docs/flex/integrations/personal-access-token) about how to create a Gitpod Personal Access Token in Gitpod Flex.
@@ -11,11 +11,14 @@ Automatically clean up stopped Gitpod environments that are older than a specifi
 
 ## Features
 
-- 🧹 Cleans up stopped environments automatically
-- ⏰ Configurable age threshold for environment deletion (default: 10 days)
-- ✅ Only deletes environments with no uncommitted changes or unpushed commits
+- 🧹 Cleans up stale environments automatically
+- ⏰ Configurable inactivity threshold (default: 10 days since last start)
+- ✅ Smart cleanup - only deletes environments that are:
+  - In STOPPED phase
+  - Have no uncommitted changes
+  - Have no unpushed commits
+  - Haven't been started for X days
 - 📄 Optional summary report of deleted environments
-- 📝 Detailed logging for debugging
 - 🔄 Handles pagination for organizations with many environments
 
 ## Usage
@@ -72,7 +75,7 @@ jobs:
 |-------|----------|---------|-------------|
 | `GITPOD_TOKEN` | Yes | - | Gitpod Personal Access Token with necessary permissions |
 | `ORGANIZATION_ID` | Yes | - | Your Gitpod Flex organization ID |
-| `OLDER_THAN_DAYS` | No | 10 | Delete environments older than this many days |
+| `OLDER_THAN_DAYS` | No | 10 | Delete environments not started for this many days |
 | `PRINT_SUMMARY` | No | false | Generate a summary of deleted environments |
 
 ## Outputs
@@ -85,7 +88,7 @@ jobs:
 ## Prerequisites
 
 1. **Gitpod Personal Access Token**:
-   - Go to [Gitpod User Settings](https://gitpod.io/user/tokens)
+   - Go to [Gitpod User Settings](https://app.gitpod.io/settings/personal-access-tokens)
    - Create a new token with necessary permissions
    - Add it as a GitHub secret named `GITPOD_TOKEN`
 

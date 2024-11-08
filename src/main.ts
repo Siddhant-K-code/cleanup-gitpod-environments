@@ -12,17 +12,61 @@ interface GitStatus {
   totalUnpushedCommits?: number;
 }
 
-interface Environment {
+interface Creator {
   id: string;
-  metadata: {
-    createdAt: string;
+  principal: string;
+}
+
+interface EnvironmentMetadata {
+  organizationId: string;
+  creator: Creator;
+  createdAt: string;
+  projectId: string;
+  runnerId: string;
+  lastStartedAt: string;
+}
+
+interface EnvironmentSpec {
+  specVersion: string;
+  desiredPhase: string;
+  machine: {
+    session: string;
+    class: string;
   };
-  status: {
-    phase: string;
-    content?: {
-      git?: GitStatus;
+  content: {
+    initializer: {
+      specs: Array<{
+        contextUrl: {
+          url: string;
+        };
+      }>;
     };
   };
+  ports?: Array<{
+    port: number;
+    admission: string;
+    name: string;
+  }>;
+  timeout?: {
+    disconnected: string;
+  };
+}
+
+interface EnvironmentStatus {
+  statusVersion: string;
+  phase: string;
+  content?: {
+    phase?: string;
+    git?: GitStatus;
+    contentLocationInMachine?: string;
+  };
+}
+
+interface Environment {
+  id: string;
+  metadata: EnvironmentMetadata;
+  spec: EnvironmentSpec;
+  status: EnvironmentStatus;
 }
 
 interface ListEnvironmentsResponse {
@@ -30,36 +74,57 @@ interface ListEnvironmentsResponse {
   pagination: PaginationResponse;
 }
 
-/**
- * Checks if the given date is older than specified days
- *
- * @param {string} dateString - ISO date string to check
- * @param {number} days - Number of days to compare against
- * @returns {boolean} - True if the date is older than specified days
- */
-function isOlderThanDays(dateString: string, days: number): boolean {
-  const date = new Date(dateString);
-  const daysInMs = days * 24 * 60 * 60 * 1000;
-  const cutoffDate = new Date(Date.now() - daysInMs);
-  return date < cutoffDate;
+interface DeletedEnvironmentInfo {
+  id: string;
+  projectUrl: string;
+  lastStarted: string;
+  createdAt: string;
+  creator: string;
+  inactiveDays: number;
 }
 
 /**
- * Lists the environments from the Gitpod API and identifies those that should be deleted.
- * Environments are selected for deletion if they are stopped, do not have changed files
- * or unpushed commits, and are older than the specified number of days.
- *
- * @param {string} gitpodToken - The access token for Gitpod API.
- * @param {string} organizationId - The organization ID.
- * @param {number} olderThanDays - Delete environments older than these many days
- * @returns {Promise<string[]>} - A promise that resolves to an array of environment IDs to be deleted.
+ * Formats a date difference in days
+ */
+function getDaysSince(date: string): number {
+  const then = new Date(date);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - then.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Extract project URL from context URL
+ */
+function getProjectUrl(env: Environment): string {
+  try {
+    const contextUrl = env.spec.content?.initializer?.specs?.[0]?.contextUrl?.url;
+    return contextUrl || 'N/A';
+  } catch (error) {
+    core.debug(`Error getting project URL for environment ${env.id}: ${error}`);
+    return 'N/A';
+  }
+}
+
+/**
+ * Checks if the environment is stale based on its last started time
+ */
+function isStale(lastStartedAt: string, days: number): boolean {
+  const lastStarted = new Date(lastStartedAt);
+  const daysInMs = days * 24 * 60 * 60 * 1000;
+  const cutoffDate = new Date(Date.now() - daysInMs);
+  return lastStarted < cutoffDate;
+}
+
+/**
+ * Lists and filters environments that should be deleted
  */
 async function listEnvironments(
   gitpodToken: string,
   organizationId: string,
   olderThanDays: number
-): Promise<string[]> {
-  const toDelete: string[] = [];
+): Promise<DeletedEnvironmentInfo[]> {
+  const toDelete: DeletedEnvironmentInfo[] = [];
   let pageToken: string | undefined = undefined;
 
   try {
@@ -81,7 +146,7 @@ async function listEnvironments(
         }
       );
 
-      core.debug("API Response: " + JSON.stringify(response.data));
+      core.debug(`Fetched ${response.data.environments.length} environments`);
 
       const environments = response.data.environments;
 
@@ -89,16 +154,30 @@ async function listEnvironments(
         const isStopped = env.status.phase === "ENVIRONMENT_PHASE_STOPPED";
         const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
         const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
-        const isOldEnough = isOlderThanDays(env.metadata.createdAt, olderThanDays);
+        const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
 
-        if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isOldEnough) {
-          toDelete.push(env.id);
-          core.debug(`Environment ${env.id} created at ${env.metadata.createdAt} is ${olderThanDays} days old and marked for deletion`);
+        if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
+          toDelete.push({
+            id: env.id,
+            projectUrl: getProjectUrl(env),
+            lastStarted: env.metadata.lastStartedAt,
+            createdAt: env.metadata.createdAt,
+            creator: env.metadata.creator.id,
+            inactiveDays: getDaysSince(env.metadata.lastStartedAt)
+          });
+
+          core.debug(
+            `Marked for deletion: Environment ${env.id}\n` +
+            `Project: ${getProjectUrl(env)}\n` +
+            `Last Started: ${env.metadata.lastStartedAt}\n` +
+            `Days Inactive: ${getDaysSince(env.metadata.lastStartedAt)}\n` +
+            `Creator: ${env.metadata.creator.id}`
+          );
         }
       });
 
       pageToken = response.data.pagination.next_page_token;
-    } while (pageToken); // Continue until no more pages
+    } while (pageToken);
 
     return toDelete;
   } catch (error) {
@@ -108,11 +187,7 @@ async function listEnvironments(
 }
 
 /**
- * Deletes a specified environment using the Gitpod API.
- *
- * @param {string} environmentId - The ID of the environment to be deleted.
- * @param {string} gitpodToken - The access token for the Gitpod API.
- * @param {string} organizationId - The organization ID.
+ * Deletes a specified environment
  */
 async function deleteEnvironment(
   environmentId: string,
@@ -135,14 +210,13 @@ async function deleteEnvironment(
     );
     core.debug(`Deleted environment: ${environmentId}`);
   } catch (error) {
-    core.error(`Error in deleteEnvironment: ${error}`);
+    core.error(`Error deleting environment ${environmentId}: ${error}`);
     throw error;
   }
 }
 
 /**
- * Main function to run the action. It retrieves the Gitpod access token, organization ID,
- * and age threshold, lists environments, deletes the selected environments, and outputs the result.
+ * Main function to run the action.
  */
 async function run() {
   try {
@@ -150,7 +224,6 @@ async function run() {
     const organizationId = core.getInput("ORGANIZATION_ID", { required: true });
     const olderThanDays = parseInt(core.getInput("OLDER_THAN_DAYS", { required: false }) || "10");
     const printSummary = core.getBooleanInput("PRINT_SUMMARY", { required: false });
-    const deletedEnvironments: string[] = [];
 
     if (!gitpodToken) {
       throw new Error("Gitpod access token is required");
@@ -166,26 +239,86 @@ async function run() {
 
     const environmentsToDelete = await listEnvironments(gitpodToken, organizationId, olderThanDays);
 
-    core.info(`Found ${environmentsToDelete.length} environments older than ${olderThanDays} days to delete`);
+    core.info(`Found ${environmentsToDelete.length} environments to delete`);
 
-    for (const environmentId of environmentsToDelete) {
-      await deleteEnvironment(environmentId, gitpodToken, organizationId);
-      printSummary ? deletedEnvironments.push(environmentId) : null;
+    let totalDaysInactive = 0;
+
+    // Track successfully deleted environments
+    const deletedEnvironments: DeletedEnvironmentInfo[] = [];
+
+    // Process deletions
+    for (const envInfo of environmentsToDelete) {
+      try {
+        await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
+        deletedEnvironments.push(envInfo);
+        totalDaysInactive += envInfo.inactiveDays;
+
+        core.debug(`Successfully deleted environment: ${envInfo.id}`);
+      } catch (error) {
+        core.warning(`Failed to delete environment ${envInfo.id}: ${error}`);
+        // Continue with other deletions even if one fails
+      }
     }
 
     if (deletedEnvironments.length > 0 && printSummary) {
-      core.summary
-        .addHeading(`Environments deleted (older than ${olderThanDays} days)`)
-        .addList(deletedEnvironments)
-        .write();
+      const avgDaysInactive = totalDaysInactive / deletedEnvironments.length;
+
+      const summary = core.summary
+        .addHeading(`Environment Cleanup Summary`)
+        .addTable([
+          [
+            { data: 'Metric', header: true },
+            { data: 'Value', header: true }
+          ],
+          ['Total Environments Cleaned', `${deletedEnvironments.length}`],
+          ['Average Days Inactive', `${avgDaysInactive.toFixed(1)} days`],
+          ['Oldest Last Start', `${Math.max(...deletedEnvironments.map(e => e.inactiveDays))} days ago`],
+          ['Newest Last Start', `${Math.min(...deletedEnvironments.map(e => e.inactiveDays))} days ago`]
+        ])
+        .addHeading('Deleted Environments', 2);
+
+      // Create table header for environments
+      const envTableHeader = [
+        { data: 'Environment ID', header: true },
+        { data: 'Project', header: true },
+        { data: 'Last Activity', header: true },
+        { data: 'Created', header: true },
+        { data: 'Creator', header: true },
+        { data: 'Days Inactive', header: true }
+      ];
+
+      // Create table rows for environments
+      const envTableRows = deletedEnvironments.map(env => [
+        env.id,
+        env.projectUrl,
+        new Date(env.lastStarted).toLocaleDateString(),
+        new Date(env.createdAt).toLocaleDateString(),
+        env.creator,
+        `${env.inactiveDays} days`
+      ]);
+
+      // Add environments table
+      summary.addTable([
+        envTableHeader,
+        ...envTableRows
+      ]);
+
+      await summary.write();
     }
 
+    // Set outputs
     core.setOutput("success", "true");
     core.setOutput("deleted_count", deletedEnvironments.length);
+    core.setOutput("avg_days_inactive", totalDaysInactive / deletedEnvironments.length);
+
+    // Log completion
+    core.info(`Successfully deleted ${deletedEnvironments.length} environments`);
+
   } catch (error) {
     core.error((error as Error).message);
     core.setOutput("success", "false");
     core.setOutput("deleted_count", 0);
+    core.setOutput("avg_days_inactive", 0);
   }
 }
 
