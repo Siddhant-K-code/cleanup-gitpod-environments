@@ -4,7 +4,7 @@ import axios from "axios";
 import * as core from "@actions/core";
 
 interface PaginationResponse {
-  next_page_token?: string;
+  nextToken?: string;
 }
 
 interface GitStatus {
@@ -193,7 +193,7 @@ async function listEnvironments(
         }
       });
 
-      pageToken = response.data.pagination.next_page_token;
+      pageToken = response.data.pagination.nextToken;
     } while (pageToken);
 
     return toDelete;
