@@ -131,6 +131,7 @@ async function listEnvironments(
 ): Promise<DeletedEnvironmentInfo[]> {
   const toDelete: DeletedEnvironmentInfo[] = [];
   let pageToken: string | undefined = undefined;
+  const baseDelay = 2000;
 
   try {
     do {
@@ -141,6 +142,10 @@ async function listEnvironments(
           pagination: {
             page_size: 100,
             page_token: pageToken
+          },
+          filter: {
+            status_phases: ["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_UNSPECIFIED"],
+            runner_kinds: ["RUNNER_KIND_REMOTE"]
           }
         },
         {
@@ -151,9 +156,9 @@ async function listEnvironments(
         }
       );
 
-      core.debug(`Fetched ${response.data.environments.length} environments`);
-
+      await sleep(baseDelay);
       const environments = response.data.environments;
+      core.debug(`Fetched ${environments.length} stopped environments`);
 
       environments.forEach((env) => {
         const isStopped = env.status.phase === "ENVIRONMENT_PHASE_STOPPED";
