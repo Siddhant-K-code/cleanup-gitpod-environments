@@ -19,7 +19,10 @@ Automatically clean up stale Gitpod environments that haven't been started for a
   - Have no unpushed commits
   - Haven't been started for X days
 - 📄 Optional summary report of deleted environments
+- 🔒 Only deletes environments that are running in remote runners (not local runners)
 - 🔄 Handles pagination for organizations with many environments
+- ⚡ Smart rate limiting with exponential backoff
+- 🔍 Detailed operation logging for better troubleshooting
 
 ## Usage
 
@@ -40,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Old Environments
-        uses: Siddhant-K-code/cleanup-gitpod-environments@v1
+        uses: Siddhant-K-code/cleanup-gitpod-environments@v1.1
         with:
           GITPOD_TOKEN: ${{ secrets.GITPOD_TOKEN }}
           ORGANIZATION_ID: ${{ secrets.GITPOD_ORGANIZATION_ID }}
@@ -61,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Old Environments
-        uses: Siddhant-K-code/cleanup-gitpod-environments@v1
+        uses: Siddhant-K-code/cleanup-gitpod-environments@v1.1
         with:
           GITPOD_TOKEN: ${{ secrets.GITPOD_TOKEN }}
           ORGANIZATION_ID: ${{ secrets.GITPOD_ORGANIZATION_ID }}
@@ -121,8 +124,9 @@ jobs:
 ## Cleanup Criteria 🔍
 
 An environment is deleted only if ALL conditions are met:
+- It is a environment running in Remote runner.
+- Currently in STOPPED or UNSPECIFIED phase
 - Not started for X days (configurable)
-- Currently in STOPPED phase
 - No uncommitted changes
 - No unpushed commits
 
