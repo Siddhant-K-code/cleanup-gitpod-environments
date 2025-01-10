@@ -158,6 +158,7 @@ async function listEnvironments(
   const baseDelay = 2000;
   let retryCount = 0;
   const maxRetries = 3;
+  let totalEnvironmentsChecked = 0;
 
   try {
     do {
@@ -186,13 +187,25 @@ async function listEnvironments(
         await sleep(baseDelay);
 
         const environments = response.data.environments;
+        totalEnvironmentsChecked += environments.length;
         core.debug(`Fetched ${environments.length} stopped environments`);
 
         for (const env of environments) {
+          core.debug(`Checking environment ${env.id}:`);
+
           const isRemoteRunner = await getRunner(env.metadata.runnerId, gitpodToken);
+          core.debug(`- Is remote runner: ${isRemoteRunner}`);
+
           const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
+          core.debug(`- Has no changed files: ${hasNoChangedFiles}`);
+
           const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
+          core.debug(`- Has no unpushed commits: ${hasNoUnpushedCommits}`);
+
           const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
+          core.debug(`- Is inactive: ${isInactive}`);
+
+
 
           if (isRemoteRunner && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
             toDelete.push({
@@ -219,6 +232,9 @@ async function listEnvironments(
         throw error;
       }
     } while (pageToken);
+
+    core.info(`Total environments checked: ${totalEnvironmentsChecked}`);
+    core.info(`Environments matching deletion criteria: ${toDelete.length}`);
 
     return toDelete;
   } catch (error) {
