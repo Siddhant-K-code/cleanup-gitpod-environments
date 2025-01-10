@@ -121,6 +121,30 @@ function isStale(lastStartedAt: string, days: number): boolean {
   return lastStarted < cutoffDate;
 }
 
+async function getRunner(runnerId: string, gitpodToken: string): Promise<boolean> {
+  const baseDelay = 2000;
+  try {
+    const response = await axios.post(
+      "https://app.gitpod.io/api/gitpod.v1.RunnerService/GetRunner",
+      {
+        runner_id: runnerId
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${gitpodToken}`,
+        },
+      }
+    );
+
+    await sleep(baseDelay);
+    return response.data.runner.kind === "RUNNER_KIND_REMOTE";
+  } catch (error) {
+    core.debug(`Error getting runner ${runnerId}: ${error}`);
+    return false;
+  }
+}
+
 /**
  * Lists and filters environments that should be deleted
  */
@@ -132,60 +156,68 @@ async function listEnvironments(
   const toDelete: DeletedEnvironmentInfo[] = [];
   let pageToken: string | undefined = undefined;
   const baseDelay = 2000;
+  let retryCount = 0;
+  const maxRetries = 3;
 
   try {
     do {
-      const response: { data: ListEnvironmentsResponse } = await axios.post<ListEnvironmentsResponse>(
-        "https://app.gitpod.io/api/gitpod.v1.EnvironmentService/ListEnvironments",
-        {
-          organization_id: organizationId,
-          pagination: {
-            page_size: 100,
-            page_token: pageToken
+      try {
+        const response: { data: ListEnvironmentsResponse } = await axios.post<ListEnvironmentsResponse>(
+          "https://app.gitpod.io/api/gitpod.v1.EnvironmentService/ListEnvironments",
+          {
+            organization_id: organizationId,
+            pagination: {
+              page_size: 100,
+              page_token: pageToken
+            },
+            filter: {
+              status_phases: ["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_UNSPECIFIED"]
+            }
           },
-          filter: {
-            status_phases: ["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_UNSPECIFIED"]
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${gitpodToken}`,
+            },
           }
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${gitpodToken}`,
-          },
+        );
+
+        core.debug(`ListEnvironments API Response: ${JSON.stringify(response.data)}`);
+        await sleep(baseDelay);
+
+        const environments = response.data.environments;
+        core.debug(`Fetched ${environments.length} stopped environments`);
+
+        for (const env of environments) {
+          const isRemoteRunner = await getRunner(env.metadata.runnerId, gitpodToken);
+          const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
+          const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
+          const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
+
+          if (isRemoteRunner && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
+            toDelete.push({
+              id: env.id,
+              projectUrl: getProjectUrl(env),
+              lastStarted: env.metadata.lastStartedAt,
+              createdAt: env.metadata.createdAt,
+              creator: env.metadata.creator.id,
+              inactiveDays: getDaysSince(env.metadata.lastStartedAt)
+            });
+          }
         }
-      );
 
-      await sleep(baseDelay);
-      const environments = response.data.environments;
-      core.debug(`Fetched ${environments.length} stopped environments`);
-
-      environments.forEach((env) => {
-        const isStopped = env.status.phase === "ENVIRONMENT_PHASE_STOPPED";
-        const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
-        const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
-        const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
-
-        if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
-          toDelete.push({
-            id: env.id,
-            projectUrl: getProjectUrl(env),
-            lastStarted: env.metadata.lastStartedAt,
-            createdAt: env.metadata.createdAt,
-            creator: env.metadata.creator.id,
-            inactiveDays: getDaysSince(env.metadata.lastStartedAt)
-          });
-
-          core.debug(
-            `Marked for deletion: Environment ${env.id}\n` +
-            `Project: ${getProjectUrl(env)}\n` +
-            `Last Started: ${env.metadata.lastStartedAt}\n` +
-            `Days Inactive: ${getDaysSince(env.metadata.lastStartedAt)}\n` +
-            `Creator: ${env.metadata.creator.id}`
-          );
+        pageToken = response.data.pagination.nextToken;
+        retryCount = 0;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 429 && retryCount < maxRetries) {
+          const delay = baseDelay * Math.pow(2, retryCount);
+          core.debug(`Rate limit hit in ListEnvironments, waiting ${delay}ms before retry ${retryCount + 1}...`);
+          await sleep(delay);
+          retryCount++;
+          continue;
         }
-      });
-
-      pageToken = response.data.pagination.nextToken;
+        throw error;
+      }
     } while (pageToken);
 
     return toDelete;
@@ -203,24 +235,41 @@ async function deleteEnvironment(
   gitpodToken: string,
   organizationId: string
 ) {
-  try {
-    await axios.post(
-      "https://app.gitpod.io/api/gitpod.v1.EnvironmentService/DeleteEnvironment",
-      {
-        environment_id: environmentId,
-        organization_id: organizationId
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${gitpodToken}`,
+  let retryCount = 0;
+  const maxRetries = 3;
+  const baseDelay = 2000;
+
+  while (retryCount <= maxRetries) {
+    try {
+      const response = await axios.post(
+        "https://app.gitpod.io/api/gitpod.v1.EnvironmentService/DeleteEnvironment",
+        {
+          environment_id: environmentId,
+          organization_id: organizationId
         },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${gitpodToken}`,
+          },
+        }
+      );
+
+      core.debug(`DeleteEnvironment API Response for ${environmentId}: ${JSON.stringify(response.data)}`);
+      await sleep(baseDelay);
+      core.debug(`Successfully deleted environment: ${environmentId}`);
+      return;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 429 && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount);
+        core.debug(`Rate limit hit in DeleteEnvironment, waiting ${delay}ms before retry ${retryCount + 1}...`);
+        await sleep(delay);
+        retryCount++;
+      } else {
+        core.error(`Error deleting environment ${environmentId}: ${error}`);
+        throw error;
       }
-    );
-    core.debug(`Deleted environment: ${environmentId}`);
-  } catch (error) {
-    core.error(`Error deleting environment ${environmentId}: ${error}`);
-    throw error;
+    }
   }
 }
 
