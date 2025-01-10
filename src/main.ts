@@ -163,6 +163,14 @@ async function listEnvironments(
         const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
         const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
 
+        environments.forEach((env) => {
+          core.debug(`Environment ${env.id}:`);
+          core.debug(`- Stopped: ${env.status.phase === "ENVIRONMENT_PHASE_STOPPED"}`);
+          core.debug(`- No changed files: ${!(env.status.content?.git?.totalChangedFiles)}`);
+          core.debug(`- No unpushed commits: ${!(env.status.content?.git?.totalUnpushedCommits)}`);
+          core.debug(`- Is inactive: ${isStale(env.metadata.lastStartedAt, olderThanDays)}`);
+        });
+
         if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
           toDelete.push({
             id: env.id,
