@@ -253,28 +253,32 @@ async function run() {
 
     // Process deletions
     for (const envInfo of environmentsToDelete) {
-      try {
-        await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
-        await sleep(1000);
-        deletedEnvironments.push(envInfo);
-        totalDaysInactive += envInfo.inactiveDays;
-
-        core.debug(`Successfully deleted environment: ${envInfo.id}`);
-      } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 429) {
-          // If we hit rate limit, wait 5 seconds before retrying
-          core.debug('Rate limit hit, waiting 5 seconds...');
-          await sleep(5000);
-          // Retry the deletion
-          try {
-            await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
-            deletedEnvironments.push(envInfo);
-            totalDaysInactive += envInfo.inactiveDays;
-          } catch (retryError) {
-            core.warning(`Failed to delete environment ${envInfo.id} after retry: ${retryError}`);
+      let retryCount = 0;
+      const maxRetries = 5;
+      const baseDelay = 2000;
+      while (retryCount <= maxRetries) {
+        try {
+          await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
+          await sleep(baseDelay);
+          deletedEnvironments.push(envInfo);
+          totalDaysInactive += envInfo.inactiveDays;
+          core.debug(`Successfully deleted environment: ${envInfo.id}`);
+        } catch (error) {
+          if (axios.isAxiosError(error) && error.response?.status === 429) {
+            // If we hit rate limit, wait 5 seconds before retrying
+            core.debug('Rate limit hit, waiting 5 seconds...');
+            await sleep(5000);
+            // Retry the deletion
+            try {
+              await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
+              deletedEnvironments.push(envInfo);
+              totalDaysInactive += envInfo.inactiveDays;
+            } catch (retryError) {
+              core.warning(`Failed to delete environment ${envInfo.id} after retry: ${retryError}`);
+            }
+          } else {
+            core.warning(`Failed to delete environment ${envInfo.id}: ${error}`);
           }
-        } else {
-          core.warning(`Failed to delete environment ${envInfo.id}: ${error}`);
         }
       }
     }
