@@ -146,16 +146,7 @@ async function listEnvironments(
         }
       );
 
-      // Add validation
-      if (!response.data) {
-        core.debug('No data received from API');
-        return [];
-      }
-
-      if (!response.data.environments) {
-        core.debug('No environments array in response');
-        return [];
-      }
+      core.debug(`Fetched ${response.data.environments.length} environments`);
 
       const environments = response.data.environments;
 
@@ -164,14 +155,6 @@ async function listEnvironments(
         const hasNoChangedFiles = !(env.status.content?.git?.totalChangedFiles);
         const hasNoUnpushedCommits = !(env.status.content?.git?.totalUnpushedCommits);
         const isInactive = isStale(env.metadata.lastStartedAt, olderThanDays);
-
-        environments.forEach((env) => {
-          core.debug(`Environment ${env.id}:`);
-          core.debug(`- Stopped: ${env.status.phase === "ENVIRONMENT_PHASE_STOPPED"}`);
-          core.debug(`- No changed files: ${!(env.status.content?.git?.totalChangedFiles)}`);
-          core.debug(`- No unpushed commits: ${!(env.status.content?.git?.totalUnpushedCommits)}`);
-          core.debug(`- Is inactive: ${isStale(env.metadata.lastStartedAt, olderThanDays)}`);
-        });
 
         if (isStopped && hasNoChangedFiles && hasNoUnpushedCommits && isInactive) {
           toDelete.push({
