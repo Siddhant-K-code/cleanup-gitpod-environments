@@ -146,9 +146,16 @@ async function listEnvironments(
         }
       );
 
-      core.debug(`Raw API response: ${JSON.stringify(response.data)}`);
+      // Add validation
+      if (!response.data) {
+        core.debug('No data received from API');
+        return [];
+      }
 
-      core.debug(`Fetched ${response.data.environments.length} environments`);
+      if (!response.data.environments) {
+        core.debug('No environments array in response');
+        return [];
+      }
 
       const environments = response.data.environments;
 
