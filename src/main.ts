@@ -84,6 +84,11 @@ interface DeletedEnvironmentInfo {
 }
 
 /**
+ * Sleep function to add delay between API calls
+ */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Formats a date difference in days
  */
 function getDaysSince(date: string): number {
@@ -250,13 +255,27 @@ async function run() {
     for (const envInfo of environmentsToDelete) {
       try {
         await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
+        await sleep(1000);
         deletedEnvironments.push(envInfo);
         totalDaysInactive += envInfo.inactiveDays;
 
         core.debug(`Successfully deleted environment: ${envInfo.id}`);
       } catch (error) {
-        core.warning(`Failed to delete environment ${envInfo.id}: ${error}`);
-        // Continue with other deletions even if one fails
+        if (axios.isAxiosError(error) && error.response?.status === 429) {
+          // If we hit rate limit, wait 5 seconds before retrying
+          core.debug('Rate limit hit, waiting 5 seconds...');
+          await sleep(5000);
+          // Retry the deletion
+          try {
+            await deleteEnvironment(envInfo.id, gitpodToken, organizationId);
+            deletedEnvironments.push(envInfo);
+            totalDaysInactive += envInfo.inactiveDays;
+          } catch (retryError) {
+            core.warning(`Failed to delete environment ${envInfo.id} after retry: ${retryError}`);
+          }
+        } else {
+          core.warning(`Failed to delete environment ${envInfo.id}: ${error}`);
+        }
       }
     }
 
