@@ -143,15 +143,10 @@ async function listEnvironments(
             "Content-Type": "application/json",
             Authorization: `Bearer ${gitpodToken}`,
           },
-          transformResponse: [(data) => {
-            const parsed = JSON.parse(data);
-            return {
-              environments: parsed.environments || [],
-              pagination: parsed.pagination || {}
-            };
-          }]
         }
       );
+
+      core.debug(`Raw API response: ${JSON.stringify(response.data)}`);
 
       core.debug(`Fetched ${response.data.environments.length} environments`);
 
