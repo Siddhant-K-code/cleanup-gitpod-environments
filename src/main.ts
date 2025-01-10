@@ -144,8 +144,7 @@ async function listEnvironments(
             page_token: pageToken
           },
           filter: {
-            status_phases: ["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_UNSPECIFIED"],
-            runner_kinds: ["RUNNER_KIND_REMOTE"]
+            status_phases: ["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_UNSPECIFIED"]
           }
         },
         {
